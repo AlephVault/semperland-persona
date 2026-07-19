@@ -1,0 +1,42 @@
+{
+  "name": "ecosystem",
+  "version": "1.0.0",
+  "description": "The ecosystem for a Semperland game.",
+  "keywords": [
+    "Semperland",
+    "Hardhat",
+    "Web3"
+  ],
+  "homepage": "https://github.com/AlephVault/semperland-game-template#readme",
+  "bugs": {
+    "url": "https://github.com/AlephVault/semperland-game-template/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AlephVault/semperland-game-template.git"
+  },
+  "license": "MIT",
+  "author": "Luis Masuelli",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "REPORT_GAS=true npx hardhat test"
+  },
+  "dependencies": {
+    "hardhat": "^2.28.6"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^6.1.2",
+    "@chainlink/contracts": "^1.4.0",
+    "@chainlink/env-enc": "^1.0.5",
+    "@chainlink/functions-toolkit": "^0.3.2",
+    "hardhat-blueprints": "^1.4.0",
+    "hardhat-servers": "^1.2.0",
+    "hardhat-chainlink-common-blueprints": "^1.0.1",
+    "hardhat-common-tools": "^1.7.2",
+    "hardhat-enquirer-plus": "^1.5.2",
+    "hardhat-ignition-deploy-everything": "^1.1.2",
+    "hardhat-method-prompts": "^1.4.0",
+    "hardhat-openzeppelin-common-blueprints": "^1.2.1"
+  }
+}
