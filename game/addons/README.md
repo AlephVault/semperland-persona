@@ -2,7 +2,7 @@
 
 The following dependencies are needed for this project:
 
-- From [redot-windrose](https://github.com/AlephVault/redot-windrose) `v1.0.x`:
+- From [redot-windrose](https://github.com/AlephVault/redot-windrose) `v1.1.x`:
 
   - AlephVault.WindRose
   - AlephVault.WindRose.LPC
@@ -15,7 +15,7 @@ The following dependencies are needed for this project:
   - AlephVault.MMO.Server (if this app is the server-side of the game)
   - AlephVault.MMO.Storage (if this app is the server-side of the game, typically)
 
-- From [redot-windrose](https://github.com/AlephVault/redot-bindrose) `v1.0.x`:
+- From [redot-bindrose](https://github.com/AlephVault/redot-bindrose) `v1.1.x`:
 
   - AlephVault.BindRose.Common
   - AlephVault.BindRose.Client (if this app is the client-side of the game)
