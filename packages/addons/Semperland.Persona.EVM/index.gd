@@ -1,0 +1,2 @@
+class_name Semperland__Persona__EVM
+extends Object
