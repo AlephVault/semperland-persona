@@ -19,7 +19,7 @@ func _init():
 ## related to the intended component keys. Many lots can refer to
 ## the same root path.
 func add_lot(n: int, root_directory: String) -> bool:
-	if n <= 1 or _lots.has(n) or or not _resolver.has(root_directory):
+	if n <= 1 or _lots.has(n) or not _resolvers.has(root_directory):
 		return false
 	_lots[n] = root_directory
 	return true
@@ -42,11 +42,37 @@ func add_local_resolver(name: String, resolver: AlephVault__WindRose__REFMAP.Uti
 	if not _resolvers.has(key):
 		_resolvers[key] = resolver
 
+func _resolver_key_for_lot(lot: int) -> String:
+	return String(_lots.get(lot, ""))
+
+func _split_lot_key(key: String) -> Array:
+	var separator := key.find("/")
+	if separator == -1:
+		return [_default_resolver, key]
+
+	var lot_key := key.substr(0, separator)
+	if not lot_key.is_valid_int():
+		return []
+
+	var lot := lot_key.to_int()
+	if lot <= 0 or not _lots.has(lot):
+		return []
+
+	var resolver_key := _resolver_key_for_lot(lot)
+	if not _resolvers.has(resolver_key):
+		return []
+
+	return [_resolvers[resolver_key], key.substr(separator + 1)]
+
 ## Resolves a non-body component texture. Implementations should
 ## return Texture2D or null. Callers ignore non-Texture2D values
 ## and textures whose dimensions are not 128x192.
 func resolve(sex: Sex, type: String, key: String, color: int = ComponentColor.Default):
-	pass
+	var resolved_key := _split_lot_key(key)
+	if resolved_key.is_empty():
+		return null
+
+	return resolved_key[0].resolve(sex, type, resolved_key[1], color)
 
 ## Releases a previous successful non-body resolve. If the key comes
 ## like "{idx}_{color}", this will be handled from the default resolver,
@@ -56,7 +82,11 @@ func resolve(sex: Sex, type: String, key: String, color: int = ComponentColor.De
 ## the remaining part will be passed to the resolver associated to the lot
 ## entry registered as N. Then, un-resolution will take place.
 func unresolve(sex: Sex, type: String, key: String, color: int = ComponentColor.Default):
-	pass
+	var resolved_key := _split_lot_key(key)
+	if resolved_key.is_empty():
+		return
+
+	resolved_key[0].unresolve(sex, type, resolved_key[1], color)
 
 ## Resolves a base body texture. This is done by the default resolver.
 func resolve_body(sex: Sex, color: BodyColor):
