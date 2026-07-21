@@ -8,11 +8,13 @@ const DEFAULT_URL: String = "local://default"
 var _resolvers: Dictionary = {}
 var _default_resolver: _DefaultResolver = null
 var _lots: Dictionary = {}
+var _lots_by_dir: Dictionary = {}
 
 func _init():
 	_default_resolver = _DefaultResolver.new()
 	_resolvers[DEFAULT_URL] = _default_resolver
 	_lots[1] = DEFAULT_URL
+	_lots_by_dir[DEFAULT_URL] = {1: true}
 
 ## Registers a lot, which is an index against one of the registered
 ## root directories and resolvers. Using lots will take place later,
@@ -22,6 +24,9 @@ func add_lot(n: int, root_directory: String) -> bool:
 	if n <= 1 or _lots.has(n) or not _resolvers.has(root_directory):
 		return false
 	_lots[n] = root_directory
+	if not _lots_by_dir.has(root_directory):
+		_lots_by_dir[root_directory] = {}
+	_lots_by_dir[root_directory][n] = true
 	return true
 
 ## Registers (instantiates) a filesystem resolver taking the source
@@ -41,6 +46,39 @@ func add_local_resolver(name: String, resolver: AlephVault__WindRose__REFMAP.Uti
 	var key = "local://" + name
 	if not _resolvers.has(key):
 		_resolvers[key] = resolver
+
+## Unregisters a resolver by either its directory or local://{name} URL.
+func remove_resolver(root_directory: String) -> bool:
+	if root_directory == DEFAULT_URL or not _resolvers.has(root_directory):
+		return false
+
+	_resolvers.erase(root_directory)
+	var lots: Dictionary = _lots_by_dir.get(root_directory, {})
+	_lots_by_dir.erase(root_directory)
+	for lot in lots.keys():
+		_lots.erase(lot)
+	return true
+
+## Tells whether a resolver is registered for a directory or local://{name} URL.
+func has_resolver(key: String) -> bool:
+	return _resolvers.has(key)
+
+## Removes a registered lot.
+func remove_lot(n: int) -> bool:
+	if n <= 1 or not _lots.has(n):
+		return false
+
+	var root_directory: String = _lots[n]
+	_lots.erase(n)
+	var lots: Dictionary = _lots_by_dir.get(root_directory, {})
+	lots.erase(n)
+	if lots.is_empty():
+		_lots_by_dir.erase(root_directory)
+	return true
+
+## Tells whether a lot is registered.
+func has_lot(n: int) -> bool:
+	return _lots.has(n)
 
 func _resolver_key_for_lot(lot: int) -> String:
 	return String(_lots.get(lot, ""))
