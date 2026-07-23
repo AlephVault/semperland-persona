@@ -2,8 +2,8 @@ extends Object
 ## Coordinates metadata lookup and lot content installation.
 
 const _EnhancedFileSystemResolver = Semperland__Persona.Utils.EnhancedFileSystemResolver
-const _LotContentsDownloader = EnhancedFileSystemResolver.Utils.LotContentsDownloader
-const _LotMetadataDownloader = EnhancedFileSystemResolver.Utils.LotMetadataDownloader
+const _LotContentsDownloader = Semperland__Persona.Utils.LotContentsDownloader
+const _LotMetadataDownloader = Semperland__Persona.Utils.LotMetadataDownloader
 
 const DEFAULT_RESOLVER_CACHE_NAME := "persona_lot_data"
 const DEFAULT_RESOLVER_CACHE_MAX_DISPOSAL_SIZE := 128
