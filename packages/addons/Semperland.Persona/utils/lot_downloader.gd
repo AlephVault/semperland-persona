@@ -68,7 +68,9 @@ func _download_lot(n: int) -> bool:
 		return false
 
 	if resolver.has_lot(n):
-		return true
+		# This means that a lot is already registered and nothing is
+		# being registered right now.
+		return false
 	return resolver.add_lot(n, resolver_key)
 
 func _ensure_resolver_for_url(resolver: _EnhancedFileSystemResolver, n: int, url: String) -> String:
