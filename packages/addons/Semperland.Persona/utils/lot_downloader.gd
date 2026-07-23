@@ -85,12 +85,13 @@ func _ensure_resolver_for_url(resolver: _EnhancedFileSystemResolver, n: int, url
 	var subdirectory := _subdirectory_for_url(url)
 	var target_directory := _target_directory.path_join(subdirectory)
 	if not resolver.has_resolver(target_directory):
-		var download := await _lot_contents_downloader.call("download_lot", n, url, subdirectory)
-		if not _is_ok(download):
-			return ""
-		var downloaded_directory := _downloaded_directory(download)
-		if downloaded_directory != target_directory:
-			return ""
+		if not DirAccess.dir_exists_absolute(target_directory):
+			var download := await _lot_contents_downloader.download_lot(n, url, subdirectory)
+			if not _is_ok(download):
+				return ""
+			var downloaded_directory := _downloaded_directory(download)
+			if downloaded_directory != target_directory:
+				return ""
 		resolver.add_resolver(
 			target_directory,
 			_resolver_cache_name,
