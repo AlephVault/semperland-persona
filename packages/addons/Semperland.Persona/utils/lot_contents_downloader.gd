@@ -62,6 +62,7 @@ func download_lot(lot_id: int, url: String, subdirectory: String) -> Dictionary:
 	var final_directory := _target_directory.path_join(subdirectory)
 	var zip_path := _target_directory.path_join(".lot_%s.zip" % lot_id)
 	var extract_directory := _target_directory.path_join(".lot_%s_extract" % lot_id)
+	var final_directory_existed := DirAccess.dir_exists_absolute(final_directory)
 
 	# Clear only downloader-owned temporary paths from previous interrupted runs.
 	_cleanup_path(zip_path)
@@ -89,7 +90,7 @@ func download_lot(lot_id: int, url: String, subdirectory: String) -> Dictionary:
 	_cleanup_path(zip_path)
 	if not _is_ok(install):
 		_cleanup_path(extract_directory)
-		if DirAccess.dir_exists_absolute(final_directory) and _directory_is_empty(final_directory):
+		if DirAccess.dir_exists_absolute(final_directory) and (not final_directory_existed or _directory_is_empty(final_directory)):
 			_cleanup_path(final_directory)
 		return install
 
@@ -125,7 +126,11 @@ func _validate_head(response: Dictionary, max_size: int) -> Dictionary:
 		return _failed({"code": "invalid_mime", "mime": mime})
 
 	var content_length := _header_value(headers, "content-length").strip_edges()
-	if content_length == "" or not content_length.is_valid_int():
+	if content_length == "":
+		if max_size > 0:
+			return _failed("missing_content_length")
+		return _success({"size": -1, "mime": mime})
+	if not content_length.is_valid_int():
 		return _failed("missing_content_length")
 	var size := content_length.to_int()
 	if size < 0:

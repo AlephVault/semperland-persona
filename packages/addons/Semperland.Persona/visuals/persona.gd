@@ -19,3 +19,39 @@ func _resolve_component_layer(type: String, value, color: int = ComponentColor.D
 		if value.begins_with("1/"):
 			value = value.substr(2)
 	return super._resolve_component_layer(type, value, color)
+
+func _refresh_visual_now(generation: int, chunked: bool) -> void:
+	if lot_downloader != null:
+		var again: Callable = func(): await _refresh_visual_now(generation, chunked)
+		var lots := _lot_keys_from_traits()
+		if not lots.is_empty() and await lot_downloader.download_lots(lots, again):
+			return
+	await super._refresh_visual_now(generation, chunked)
+
+func _lot_keys_from_traits() -> Array[int]:
+	var lots: Dictionary = {}
+	for property in _get_traits_properties():
+		var value = get(String(property))
+		if not (value is String):
+			continue
+		var lot := _lot_key_from_value(value)
+		if lot >= 2:
+			lots[lot] = true
+
+	var result: Array[int] = []
+	for lot in lots.keys():
+		result.append(int(lot))
+	return result
+
+func _lot_key_from_value(value: String) -> int:
+	var key := value.strip_edges()
+	var separator := key.find("/")
+	if separator <= 0 or separator == key.length() - 1:
+		return 0
+
+	var lot_key := key.substr(0, separator)
+	if not lot_key.is_valid_int():
+		return 0
+
+	var lot := lot_key.to_int()
+	return lot if lot >= 2 else 0
