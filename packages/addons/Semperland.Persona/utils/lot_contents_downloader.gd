@@ -20,50 +20,54 @@ const ZIP_MIME_TYPES := {
 ## Directory names required by the Persona filesystem resolver layout.
 const REQUIRED_DIRECTORIES := ["Female", "Male"]
 
+var _max_size: int = 0
+var _head_timeout: float = 0
+var _download_timeout: float = 0
+var _target_directory: String = ""
+
+func _init(
+	max_size: int,
+	head_timeout: float,
+	download_timeout: float,
+	target_directory: String
+):
+	_max_size = max_size
+	_head_timeout = head_timeout
+	_download_timeout = download_timeout
+	_target_directory = _normalize_user_directory(target_directory)
+
 ## Downloads a lot archive, validates it, unpacks it, and installs its Female
 ## and Male directories into target_directory/subdirectory.
 ##
 ## lot_id must be positive and is used only to name temporary files.
 ## url must be http:// or https://.
-## max_size is expressed in bytes; values <= 0 disable the size limit.
-## head_timeout applies to the HEAD request used for metadata validation.
-## download_timeout applies to the GET request used for the full archive.
-## target_directory must already exist and must be a user:// path.
+## The configured target_directory must already exist and must be a valid user:// path.
 ## subdirectory must be a single directory name, not a path.
 ##
 ## The final subdirectory may be missing or empty. If it already contains files,
 ## this method aborts instead of overwriting or deleting existing user data.
-func download_lot(
-	lot_id: int,
-	url: String,
-	max_size: int,
-	head_timeout: float,
-	download_timeout: float,
-	target_directory: String,
-	subdirectory: String
-) -> Dictionary:
-	var validation := _validate_arguments(lot_id, url, target_directory, subdirectory)
+func download_lot(lot_id: int, url: String, subdirectory: String) -> Dictionary:
+	var validation := _validate_arguments(lot_id, url, subdirectory)
 	if not _is_ok(validation):
 		return validation
 
-	var target_root := _normalize_user_directory(target_directory)
-	var final_directory := target_root.path_join(subdirectory)
-	var zip_path := target_root.path_join(".lot_%s.zip" % lot_id)
-	var extract_directory := target_root.path_join(".lot_%s_extract" % lot_id)
+	var final_directory := _target_directory.path_join(subdirectory)
+	var zip_path := _target_directory.path_join(".lot_%s.zip" % lot_id)
+	var extract_directory := _target_directory.path_join(".lot_%s_extract" % lot_id)
 
 	# Clear only downloader-owned temporary paths from previous interrupted runs.
 	_cleanup_path(zip_path)
 	_cleanup_path(extract_directory)
 
-	var head := await _request(url, HTTPClient.METHOD_HEAD, "", 0, max(head_timeout, 0.0))
+	var head := await _request(url, HTTPClient.METHOD_HEAD, "", 0, max(_head_timeout, 0.0))
 	if not _is_ok(head):
 		return head
 
-	var head_check := _validate_head(_value(head), max_size)
+	var head_check := _validate_head(_value(head), _max_size)
 	if not _is_ok(head_check):
 		return head_check
 
-	var download := await _download(url, zip_path, max_size, max(download_timeout, 0.0))
+	var download := await _download(url, zip_path, _max_size, max(_download_timeout, 0.0))
 	if not _is_ok(download):
 		_cleanup_path(zip_path)
 		return download
@@ -87,15 +91,15 @@ func download_lot(
 	})
 
 ## Performs local argument validation before any network or filesystem mutation.
-func _validate_arguments(lot_id: int, url: String, target_directory: String, subdirectory: String) -> Dictionary:
+func _validate_arguments(lot_id: int, url: String, subdirectory: String) -> Dictionary:
 	if lot_id <= 0:
 		return _failed("invalid_lot_id")
 	var clean_url := url.strip_edges()
 	if not (clean_url.begins_with("http://") or clean_url.begins_with("https://")):
 		return _failed("invalid_url")
-	var target_root := _normalize_user_directory(target_directory)
-	if not target_root.begins_with("user://") or not DirAccess.dir_exists_absolute(target_root):
-		return _failed("invalid_target_directory")
+	var target_check := _validate_target_directory(_target_directory)
+	if not _is_ok(target_check):
+		return target_check
 	if not _is_valid_subdirectory_name(subdirectory):
 		return _failed("invalid_subdirectory")
 	return _success(null)
@@ -389,6 +393,44 @@ func _is_valid_subdirectory_name(name: String) -> bool:
 	if clean_name == "." or clean_name == "..":
 		return false
 	return clean_name.find("/") == -1 and clean_name.find("\\") == -1 and clean_name.find(":") == -1
+
+## Validates the downloader root as a concrete directory under user://.
+func _validate_target_directory(path: String) -> Dictionary:
+	var normalized := _normalize_user_directory(path)
+	if normalized == "":
+		return _failed("invalid_target_directory")
+	if not normalized.begins_with("user://"):
+		return _failed("invalid_target_directory")
+
+	var relative_path := normalized.substr("user://".length())
+	if relative_path.find("\\") != -1 or relative_path.find(":") != -1 or relative_path.begins_with("/"):
+		return _failed("invalid_target_directory")
+
+	if relative_path != "":
+		var parts := relative_path.split("/", true)
+		for part in parts:
+			if part == "" or part == "." or part == "..":
+				return _failed("invalid_target_directory")
+
+	var user_root := ProjectSettings.globalize_path("user://")
+	var global_path := ProjectSettings.globalize_path(normalized)
+	if not _is_same_or_child_path(global_path, user_root):
+		return _failed("invalid_target_directory")
+
+	if not DirAccess.dir_exists_absolute(normalized):
+		return _failed("invalid_target_directory")
+	return _success(normalized)
+
+func _is_same_or_child_path(path: String, root: String) -> bool:
+	var normalized_path := _normalize_global_directory(path)
+	var normalized_root := _normalize_global_directory(root)
+	return normalized_path == normalized_root or normalized_path.begins_with(normalized_root + "/")
+
+func _normalize_global_directory(path: String) -> String:
+	var normalized := path.replace("\\", "/").strip_edges()
+	while normalized.ends_with("/") and normalized != "/":
+		normalized = normalized.trim_suffix("/")
+	return normalized
 
 ## Trims trailing slashes while preserving the user:// root spelling.
 func _normalize_user_directory(path: String) -> String:
