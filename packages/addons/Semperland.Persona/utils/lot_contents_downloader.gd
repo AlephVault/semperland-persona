@@ -24,24 +24,31 @@ var _max_size: int = 0
 var _head_timeout: float = 0
 var _download_timeout: float = 0
 var _target_directory: String = ""
+var _ipfs_gateway: String = ""
+var _ipfs_gateway_valid: bool = true
 
 func _init(
 	max_size: int,
 	head_timeout: float,
 	download_timeout: float,
-	target_directory: String
+	target_directory: String,
+	ipfs_gateway: String = ""
 ):
 	_max_size = max_size
 	_head_timeout = head_timeout
 	_download_timeout = download_timeout
 	_target_directory = _normalize_user_directory(target_directory)
+	var normalized_ipfs_gateway := _normalize_ipfs_gateway(ipfs_gateway)
+	_ipfs_gateway_valid = ipfs_gateway.strip_edges() == "" or normalized_ipfs_gateway != ""
+	_ipfs_gateway = normalized_ipfs_gateway
 
 ## Downloads a lot archive, validates it, unpacks it, and installs its Female
 ## and Male directories into target_directory/subdirectory.
 ##
 ## lot_id must be positive and is used only to name temporary files.
-## url must be http:// or https://.
+## url must be http://, https://, or a valid ipfs:// URL.
 ## The configured target_directory must already exist and must be a valid user:// path.
+## ipfs:// URLs are resolved through the configured IPFS gateway before download.
 ## subdirectory must be a single directory name, not a path.
 ##
 ## The final subdirectory may be missing or empty. If it already contains files,
@@ -50,6 +57,7 @@ func download_lot(lot_id: int, url: String, subdirectory: String) -> Dictionary:
 	var validation := _validate_arguments(lot_id, url, subdirectory)
 	if not _is_ok(validation):
 		return validation
+	var download_url: String = _value(validation)
 
 	var final_directory := _target_directory.path_join(subdirectory)
 	var zip_path := _target_directory.path_join(".lot_%s.zip" % lot_id)
@@ -59,7 +67,7 @@ func download_lot(lot_id: int, url: String, subdirectory: String) -> Dictionary:
 	_cleanup_path(zip_path)
 	_cleanup_path(extract_directory)
 
-	var head := await _request(url, HTTPClient.METHOD_HEAD, "", 0, max(_head_timeout, 0.0))
+	var head := await _request(download_url, HTTPClient.METHOD_HEAD, "", 0, max(_head_timeout, 0.0))
 	if not _is_ok(head):
 		return head
 
@@ -67,7 +75,7 @@ func download_lot(lot_id: int, url: String, subdirectory: String) -> Dictionary:
 	if not _is_ok(head_check):
 		return head_check
 
-	var download := await _download(url, zip_path, _max_size, max(_download_timeout, 0.0))
+	var download := await _download(download_url, zip_path, _max_size, max(_download_timeout, 0.0))
 	if not _is_ok(download):
 		_cleanup_path(zip_path)
 		return download
@@ -94,15 +102,15 @@ func download_lot(lot_id: int, url: String, subdirectory: String) -> Dictionary:
 func _validate_arguments(lot_id: int, url: String, subdirectory: String) -> Dictionary:
 	if lot_id <= 0:
 		return _failed("invalid_lot_id")
-	var clean_url := url.strip_edges()
-	if not (clean_url.begins_with("http://") or clean_url.begins_with("https://")):
-		return _failed("invalid_url")
+	var resolved_url := _resolve_download_url(url)
+	if not _is_ok(resolved_url):
+		return resolved_url
 	var target_check := _validate_target_directory(_target_directory)
 	if not _is_ok(target_check):
 		return target_check
 	if not _is_valid_subdirectory_name(subdirectory):
 		return _failed("invalid_subdirectory")
-	return _success(null)
+	return resolved_url
 
 ## Validates the HEAD response: successful HTTP status, zip MIME type, and
 ## Content-Length within the optional byte limit.
@@ -393,6 +401,90 @@ func _is_valid_subdirectory_name(name: String) -> bool:
 	if clean_name == "." or clean_name == "..":
 		return false
 	return clean_name.find("/") == -1 and clean_name.find("\\") == -1 and clean_name.find(":") == -1
+
+## Resolves supported source URLs into HTTP(S) URLs consumable by HTTPRequest.
+func _resolve_download_url(url: String) -> Dictionary:
+	var clean_url := url.strip_edges()
+	if clean_url.begins_with("http://") or clean_url.begins_with("https://"):
+		return _success(clean_url)
+	if clean_url.begins_with("ipfs://"):
+		return _resolve_ipfs_url(clean_url)
+	return _failed("invalid_url")
+
+## Converts ipfs://{CID}[/{path}] into {gateway}/ipfs/{CID}[/{path}].
+func _resolve_ipfs_url(url: String) -> Dictionary:
+	if not _ipfs_gateway_valid:
+		return _failed("invalid_ipfs_gateway")
+	if _ipfs_gateway == "":
+		return _failed("missing_ipfs_gateway")
+
+	var ipfs_path := url.substr("ipfs://".length())
+	if not _is_valid_ipfs_path(ipfs_path):
+		return _failed("invalid_ipfs_url")
+
+	if _ipfs_gateway.ends_with("/ipfs"):
+		return _success(_ipfs_gateway + "/" + ipfs_path)
+	return _success(_ipfs_gateway + "/ipfs/" + ipfs_path)
+
+func _is_valid_ipfs_path(path: String) -> bool:
+	if path == "" or path.begins_with("/") or path.find("\\") != -1:
+		return false
+	if path.find("?") != -1 or path.find("#") != -1 or path.find(":") != -1:
+		return false
+
+	var parts := path.split("/", true)
+	if parts.is_empty() or not _is_valid_ipfs_cid(parts[0]):
+		return false
+
+	for i in range(1, parts.size()):
+		if not _is_valid_ipfs_path_segment(parts[i]):
+			return false
+	return true
+
+func _is_valid_ipfs_cid(cid: String) -> bool:
+	if cid.length() < 2:
+		return false
+	return _string_has_only_chars(cid, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+
+func _is_valid_ipfs_path_segment(segment: String) -> bool:
+	if segment == "" or segment == "." or segment == "..":
+		return false
+	return _string_has_only_chars(
+		segment,
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._-~"
+	)
+
+func _normalize_ipfs_gateway(gateway: String) -> String:
+	var normalized := gateway.strip_edges()
+	if normalized == "":
+		return ""
+	if normalized.find("\\") != -1 or normalized.find("?") != -1 or normalized.find("#") != -1:
+		return ""
+	if normalized.find(" ") != -1:
+		return ""
+	if normalized.begins_with("http://"):
+		return ""
+	if not normalized.begins_with("https://"):
+		normalized = "https://" + normalized
+	while normalized.ends_with("/"):
+		normalized = normalized.trim_suffix("/")
+	if normalized == "https://" or normalized.find("://", "https://".length()) != -1:
+		return ""
+	var base_path := normalized.substr("https://".length())
+	if base_path == "" or base_path.begins_with("/") or base_path.find("//") != -1 or base_path.find("..") != -1:
+		return ""
+	if not _string_has_only_chars(
+		base_path,
+		"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.-_~:/"
+	):
+		return ""
+	return normalized
+
+func _string_has_only_chars(value: String, allowed: String) -> bool:
+	for i in range(value.length()):
+		if allowed.find(value.substr(i, 1)) == -1:
+			return false
+	return true
 
 ## Validates the downloader root as a concrete directory under user://.
 func _validate_target_directory(path: String) -> Dictionary:
